@@ -239,13 +239,15 @@
   "scripts": {
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
-    "package": "vsce package --no-dependencies -o ../../kicad-lens.vsix"
+    "test:vscode": "node test/runTest.mjs",
+    "package": "node esbuild.mjs --minify && node ../webview/esbuild.mjs --minify && vsce package --no-dependencies -o ../../kicad-lens.vsix"
   },
   "dependencies": {
     "@kicad-lens/core": "*"
   },
   "devDependencies": {
     "@types/vscode": "~1.90.0",
+    "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.0.0"
   }
 }

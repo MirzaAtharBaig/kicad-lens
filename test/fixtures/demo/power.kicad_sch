@@ -1,0 +1,16 @@
+(kicad_sch (version 20250114) (generator "eeschema") (uuid "sub-file-uuid") (paper "A4")
+
+  (lib_symbols
+    (symbol "Device:R"
+      (symbol "R_0_1" (rectangle (start -1.016 -2.54) (end 1.016 2.54)))
+      (symbol "R_1_1"
+        (pin passive line (at 0 3.81 270) (length 1.27) (name "~") (number "1"))
+        (pin passive line (at 0 -3.81 90) (length 1.27) (name "~") (number "2")))))
+  (symbol (lib_id "Device:R") (at 60.96 60.96 0) (unit 1)
+    (in_bom yes) (on_board yes) (dnp no)
+    (uuid "7a0c1a52-0000-4000-8000-000000000003")
+    (property "Reference" "R3" (at 0 0 0))
+    (property "Value" "0R" (at 0 0 0))
+    (property "Footprint" "Resistor_SMD:R_0603" (at 0 0 0))
+    (instances (project "demo" (path "/root-uuid/sub-uuid" (reference "R3") (unit 1)))))
+  (sheet_instances (path "/" (page "1"))))
