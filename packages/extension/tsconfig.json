@@ -6,5 +6,5 @@
     "types": ["node", "vscode"]
   },
   "include": ["src"],
-  "references": [{ "path": "../core" }, { "path": "../webview" }]
+  "references": [{ "path": "../core" }]
 }

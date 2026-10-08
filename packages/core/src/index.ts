@@ -11,3 +11,4 @@ export * from './diff/types';
 export { diffSchematic } from './diff/schematic';
 export { diffPcb } from './diff/pcb';
 export { semanticDiff } from './diff/semantic';
+export * from './protocol';

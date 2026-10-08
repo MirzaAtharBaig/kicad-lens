@@ -1,12 +1,16 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "out",
+    "composite": false,
+    "declaration": false,
+    "noEmit": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": []
+    "types": [],
+    "paths": {
+      "@kicad-lens/protocol": ["../core/src/protocol.ts"]
+    }
   },
   "include": ["src"]
 }

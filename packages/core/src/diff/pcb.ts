@@ -4,6 +4,8 @@ import type { Change, DiffResult, FieldChange } from './types';
 import { cluster, fieldDiff, fmt, matchBy, plural, recordDiff, refCompare } from './util';
 
 const p2s = (p: Point) => `${fmt(p.x)},${fmt(p.y)}`;
+/** Footprints without a reference (logos, graphics) are named after their library footprint. */
+const fpTitle = (f: Footprint) => f.reference || f.fpid.replace(/^.*:/, '') || '(footprint)';
 
 function footprintFields(b: Footprint, a: Footprint): FieldChange[] {
   const out: FieldChange[] = [];
@@ -61,13 +63,13 @@ export function diffPcb(before: Pcb, after: Pcb): DiffResult {
   const fm = matchBy(before.footprints, after.footprints, [(f) => f.uuid || undefined, (f) => f.reference || undefined]);
   for (const f of fm.removed)
     changes.push({
-      id: nextId(), category: 'component', kind: 'removed', title: f.reference, summary: `Removed ${f.value} (${f.fpid})`,
+      id: nextId(), category: 'component', kind: 'removed', title: fpTitle(f), summary: `Removed ${f.value ? f.value + ' ' : ''}(${f.fpid})`,
       fields: [{ field: 'Value', before: f.value }, { field: 'Footprint', before: f.fpid }],
       locations: [{ layer: fpLayer(f), bbox: f.bbox }],
     });
   for (const f of fm.added)
     changes.push({
-      id: nextId(), category: 'component', kind: 'added', title: f.reference, summary: `Added ${f.value} (${f.fpid})`,
+      id: nextId(), category: 'component', kind: 'added', title: fpTitle(f), summary: `Added ${f.value ? f.value + ' ' : ''}(${f.fpid})`,
       fields: [{ field: 'Value', after: f.value }, { field: 'Footprint', after: f.fpid }],
       locations: [{ layer: fpLayer(f), bbox: f.bbox }],
     });
@@ -75,7 +77,7 @@ export function diffPcb(before: Pcb, after: Pcb): DiffResult {
     const fields = footprintFields(b, a);
     if (fields.length)
       changes.push({
-        id: nextId(), category: 'component', kind: 'modified', title: a.reference, summary: summarize(fields), fields,
+        id: nextId(), category: 'component', kind: 'modified', title: fpTitle(a), summary: summarize(fields), fields,
         locations: [{ layer: fpLayer(a), bbox: union(b.bbox, a.bbox) }],
       });
   }

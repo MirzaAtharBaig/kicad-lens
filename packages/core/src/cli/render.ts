@@ -15,6 +15,8 @@ export interface SheetRender {
   file: string;
   /** SVG file name inside the render directory (absent if kicad-cli produced none). */
   svg?: string;
+  /** Black-and-white variant used as an alpha mask in overlay diffs. */
+  mask?: string;
   width: number;
   height: number;
 }
@@ -48,7 +50,16 @@ export interface RenderOptions {
 }
 
 const MANIFEST = 'manifest.json';
-const RENDER_VERSION = 2; // bump when output layout changes
+
+async function dirSize(dir: string): Promise<number> {
+  let size = 0;
+  for (const e of await readdir(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    size += e.isDirectory() ? await dirSize(p) : (await stat(p)).size;
+  }
+  return size;
+}
+const RENDER_VERSION = 3; // bump when output layout changes
 
 export class RenderCache {
   private readonly inflight = new Map<string, Promise<RenderManifest>>();
@@ -103,11 +114,20 @@ export class RenderCache {
   private async renderSch(snap: Snapshot, src: string, out: string, opts: RenderOptions): Promise<RenderManifest> {
     const sch = snap.schematic!;
     const entry = path.join(src, ...snap.entry.split('/'));
-    const args = ['sch', 'export', 'svg', '-o', out + path.sep, '--no-background-color'];
-    if (!opts.showDrawingSheet) args.push('--exclude-drawing-sheet');
-    args.push(entry);
+    const svgArgs = (dir: string, bw: boolean) => [
+      'sch', 'export', 'svg', '-o', dir + path.sep, '--no-background-color',
+      ...(bw ? ['--black-and-white'] : []),
+      ...(opts.showDrawingSheet ? [] : ['--exclude-drawing-sheet']),
+      entry,
+    ];
     const warnings: string[] = [];
-    await this.runner.exec(args, { cwd: src, signal: opts.signal, timeoutMs: 300_000 });
+    // Colour SVGs for viewing; black-and-white ones (no body fills) as diff masks.
+    const bwDir = path.join(out, 'bw');
+    await mkdir(bwDir);
+    await Promise.all([
+      this.runner.exec(svgArgs(out, false), { cwd: src, signal: opts.signal, timeoutMs: 300_000 }),
+      this.runner.exec(svgArgs(bwDir, true), { cwd: src, signal: opts.signal, timeoutMs: 300_000 }),
+    ]);
 
     let netlist: string | undefined;
     try {
@@ -121,10 +141,12 @@ export class RenderCache {
     }
 
     const produced = new Set(await readdir(out));
+    const producedBw = new Set(await readdir(bwDir));
     const sheets: SheetRender[] = sch.sheets.map((s) => {
       const svg = sheetSvgName(sch.projectName, s.namePath);
       if (!produced.has(svg)) warnings.push(`No SVG for sheet ${s.namePath}`);
       return {
+        mask: producedBw.has(svg) ? `bw/${svg}` : undefined,
         path: s.path,
         namePath: s.namePath,
         name: s.namePath === '/' ? sch.projectName : s.namePath.replace(/\/$/, '').replace(/^.*\//, ''),
@@ -190,9 +212,7 @@ export class RenderCache {
         if (name.includes('.tmp-')) continue;
         const dir = path.join(this.root, name);
         const st = await stat(dir);
-        let size = 0;
-        for (const f of await readdir(dir)) size += (await stat(path.join(dir, f))).size;
-        entries.push({ dir, size, time: st.mtimeMs });
+        entries.push({ dir, size: await dirSize(dir), time: st.mtimeMs });
       }
     } catch {
       return;

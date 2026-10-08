@@ -11,7 +11,8 @@ export type ChangeCategory =
   | 'routing'
   | 'zone'
   | 'board'
-  | 'graphic';
+  | 'graphic'
+  | 'power';
 
 export interface FieldChange {
   field: string;

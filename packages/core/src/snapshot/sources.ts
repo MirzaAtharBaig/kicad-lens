@@ -19,9 +19,10 @@ export function fsSource(dir: string, label = 'Working tree'): RevisionSource {
 
 /**
  * Files of a git revision via `git show <rev>:<path>`.
- * `dir` is the document's directory inside the work tree.
+ * `dir` is the document's directory inside the work tree; an empty `rev`
+ * reads from the index (staged content).
  */
-export function gitSource(dir: string, rev: string, label = rev): RevisionSource {
+export function gitSource(dir: string, rev: string, label = rev || 'Index', gitPath = 'git'): RevisionSource {
   const cache = new Map<string, Promise<Uint8Array | undefined>>();
   return {
     label,
@@ -30,7 +31,7 @@ export function gitSource(dir: string, rev: string, label = rev): RevisionSource
       if (!p) {
         p = new Promise((resolve) => {
           // `./` makes the path relative to cwd instead of the repository root.
-          execFile('git', ['show', `${rev}:./${rel}`], { cwd: dir, encoding: 'buffer', maxBuffer: 512 * 1024 * 1024, windowsHide: true }, (err, stdout) =>
+          execFile(gitPath, ['show', `${rev}:./${rel}`], { cwd: dir, encoding: 'buffer', maxBuffer: 512 * 1024 * 1024, windowsHide: true }, (err, stdout) =>
             resolve(err ? undefined : new Uint8Array(stdout)),
           );
         });

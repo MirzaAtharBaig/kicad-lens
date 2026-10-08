@@ -9,7 +9,7 @@
   "scripts": {
     "build": "npm run build -w packages/webview && npm run build -w packages/extension",
     "watch": "npm run watch -w packages/extension",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b && tsc -p packages/webview",
     "test": "vitest run",
     "lint": "eslint .",
     "package": "npm run build && npm run package -w packages/extension"

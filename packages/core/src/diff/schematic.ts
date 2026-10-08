@@ -5,6 +5,8 @@ import type { Change, DiffResult, FieldChange } from './types';
 import { cluster, fieldDiff, fmt, matchBy, plural, recordDiff, refCompare } from './util';
 
 const p2s = (p: Point) => `${fmt(p.x)},${fmt(p.y)}`;
+/** Power and flag symbols (#PWR, #FLG) are listed apart from real parts. */
+const symCat = (s: SchSymbol) => (s.reference.startsWith('#') ? ('power' as const) : ('component' as const));
 
 function wireKey(w: Wire): string {
   const a = p2s(w.a);
@@ -49,14 +51,14 @@ function sheetDiff(sb: SheetInstance | undefined, sa: SheetInstance | undefined,
   const m = matchBy(symB, symA, [(s) => s.uuid || undefined, (s) => `${s.reference}#${s.unit}`]);
   for (const s of m.removed)
     changes.push({
-      id: nextId(), category: 'component', kind: 'removed', title: s.reference,
+      id: nextId(), category: symCat(s), kind: 'removed', title: s.reference,
       summary: `Removed ${s.properties['Value'] ?? ''} (${s.libId})`.trim(),
       fields: [{ field: 'Value', before: s.properties['Value'] }, { field: 'Library symbol', before: s.libId }],
       locations: [{ sheet, bbox: s.bbox }],
     });
   for (const s of m.added)
     changes.push({
-      id: nextId(), category: 'component', kind: 'added', title: s.reference,
+      id: nextId(), category: symCat(s), kind: 'added', title: s.reference,
       summary: `Added ${s.properties['Value'] ?? ''} (${s.libId})`.trim(),
       fields: [{ field: 'Value', after: s.properties['Value'] }, { field: 'Library symbol', after: s.libId }],
       locations: [{ sheet, bbox: s.bbox }],
@@ -65,7 +67,7 @@ function sheetDiff(sb: SheetInstance | undefined, sa: SheetInstance | undefined,
     const fields = symbolChanges(b, a);
     if (!fields.length) continue;
     changes.push({
-      id: nextId(), category: 'component', kind: 'modified', title: a.reference,
+      id: nextId(), category: symCat(a), kind: 'modified', title: a.reference,
       summary: describeFields(fields), fields,
       locations: [{ sheet, bbox: union(b.bbox, a.bbox) }],
     });
@@ -218,7 +220,7 @@ export function diffSchematic({ before, after, netlistBefore, netlistAfter }: Sc
   if (netlistBefore && netlistAfter) changes.push(...netChanges(netlistBefore, netlistAfter, after, nextId));
 
   const order = new Map(after.sheets.map((s, i) => [s.namePath, i]));
-  const catOrder = ['sheet', 'component', 'net', 'label', 'wiring'];
+  const catOrder = ['sheet', 'component', 'net', 'label', 'wiring', 'power'];
   changes.sort(
     (x, y) =>
       catOrder.indexOf(x.category) - catOrder.indexOf(y.category) ||

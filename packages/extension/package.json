@@ -192,18 +192,6 @@
         }
       ]
     },
-    "keybindings": [
-      {
-        "command": "kicadLens.nextChange",
-        "key": "f7",
-        "when": "kicadLens.diffFocused"
-      },
-      {
-        "command": "kicadLens.previousChange",
-        "key": "shift+f7",
-        "when": "kicadLens.diffFocused"
-      }
-    ],
     "configuration": {
       "title": "KiCad Lens",
       "properties": {
