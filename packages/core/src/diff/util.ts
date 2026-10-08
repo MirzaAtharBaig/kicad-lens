@@ -105,3 +105,18 @@ export function plural(n: number, word: string): string {
 export function refCompare(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 }
+
+/** Old and new position of a changed item: one shared box if it did not move, else one per side. */
+export function sideLocations<T extends object>(base: T, before: BBox, after: BBox): (T & { bbox: BBox; side?: 'before' | 'after' })[] {
+  const same =
+    Math.abs(before.minX - after.minX) < 1e-3 &&
+    Math.abs(before.minY - after.minY) < 1e-3 &&
+    Math.abs(before.maxX - after.maxX) < 1e-3 &&
+    Math.abs(before.maxY - after.maxY) < 1e-3;
+  return same ? [{ ...base, bbox: after }] : [{ ...base, bbox: after, side: 'after' }, { ...base, bbox: before, side: 'before' }];
+}
+
+/** Side of a cluster that holds only additions or only removals. */
+export function clusterSide(added: number, removed: number): 'before' | 'after' | undefined {
+  return removed === 0 ? 'after' : added === 0 ? 'before' : undefined;
+}

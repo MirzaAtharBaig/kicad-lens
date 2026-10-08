@@ -455,7 +455,12 @@ svg.annotations rect {
 }
 svg.annotations rect.chg {
   stroke-dasharray: 4 3;
-  opacity: 0.8;
+  stroke-width: 1px;
+  opacity: 0.6;
+}
+/* Old position of a moved/changed item: dotted. */
+svg.annotations rect.chg.old {
+  stroke-dasharray: 1 3;
 }
 svg.annotations rect.added {
   stroke: var(--added);

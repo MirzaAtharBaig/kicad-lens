@@ -15,6 +15,8 @@ interface Persisted {
   flipped?: boolean;
   showChanges?: boolean;
   showChangesPaired?: boolean;
+  /** Change boxes on the drawing: every change, or only the selected one. */
+  boxes?: 'all' | 'selected';
   onlyCurrent?: boolean;
 }
 
@@ -181,7 +183,15 @@ function buildLayout(): void {
   btn('+', 'Zoom in (+)', () => panes[0]?.pz.zoomBy(1.4));
   btn('Fit', 'Fit to page (F)', fit);
   if (isPcb) btn('Flip', 'View from bottom (B)', () => setFlipped(!ctx.flipped, true), 'flip');
-  if (isDiff) btn('Changes', 'Toggle changes panel', () => togglePanel(), 'toggle-changes');
+  if (isDiff) {
+    const boxes = btn('', '', () => {
+      save({ boxes: persisted.boxes === 'selected' ? 'all' : 'selected' });
+      updateBoxesButton(boxes);
+      rebuildStages();
+    });
+    updateBoxesButton(boxes);
+    btn('Changes', 'Toggle changes panel', () => togglePanel(), 'toggle-changes');
+  }
   btn('{ }', 'Open as text', () => post({ type: 'command', command: 'openAsText' }));
 
   const body = h('div', { class: 'body' });
@@ -224,6 +234,15 @@ function buildLayout(): void {
     w.onclick = () => post({ type: 'command', command: 'showLog' });
   }
   document.onkeydown = onKey;
+}
+
+function updateBoxesButton(b: HTMLButtonElement): void {
+  const all = persisted.boxes !== 'selected';
+  b.textContent = all ? 'Boxes: all' : 'Boxes: selected';
+  b.title =
+    'Dashed boxes mark changed areas (they are markers, not part of the drawing):\n' +
+    'amber = modified, green = added, red = removed; solid = selected change.\n' +
+    (all ? 'Click to show only the selected change.' : 'Click to show every change.');
 }
 
 function setMode(m: DiffMode): void {
@@ -310,15 +329,16 @@ function rebuildStages(): void {
   const diff = m.mode === 'diff';
   const size = pageSize(m.after.kind === 'sch' && !sheetOf(m.after, ctx.sheetId) ? m.before : m.after, ctx);
   const half = paired() ? (m.pairedWith === 'left' ? 'before' : 'after') : undefined;
-  // In one half of a side-by-side diff, box only what this side can show.
-  const visibleChanges = half ? changes().filter((c) => c.kind === 'modified' || c.kind === (half === 'before' ? 'removed' : 'added')) : changes();
-  const annotate = (stage: HTMLElement, rev?: RevisionView) =>
+  // Boxes of removed items / old positions belong to `before`, added items / new positions to `after`.
+  const annotate = (stage: HTMLElement, rev?: RevisionView, side?: 'before' | 'after') =>
     buildAnnotations(stage, size, ctx, {
-      changes: diff ? visibleChanges : [],
+      changes: diff ? changes() : [],
       selected,
       flash,
       links: sheetOf(rev ?? m.after, ctx.sheetId)?.links,
       onLink: (t) => setSheet(t, true),
+      side,
+      onlySelected: persisted.boxes === 'selected',
     });
 
   if (!diff) {
@@ -328,7 +348,7 @@ function rebuildStages(): void {
   } else if (half) {
     const own = half === 'before' ? m.before : m.after;
     buildOverlay(panes[0]!.stage, m.before, m.after, ctx, half);
-    annotate(panes[0]!.stage, own);
+    annotate(panes[0]!.stage, own, half);
     panes[0]!.label.replaceChildren(
       half === 'before'
         ? h('span', { class: 'legend removed' }, `− removed in ${m.after.label}`)
@@ -346,8 +366,8 @@ function rebuildStages(): void {
   } else if (mode === 'sideBySide') {
     buildRevision(panes[0]!.stage, m.before, ctx);
     buildRevision(panes[1]!.stage, m.after, ctx);
-    annotate(panes[0]!.stage, m.before);
-    annotate(panes[1]!.stage, m.after);
+    annotate(panes[0]!.stage, m.before, 'before');
+    annotate(panes[1]!.stage, m.after, 'after');
     panes[0]!.label.textContent = m.before?.label ?? '';
     panes[1]!.label.textContent = m.after.label;
   } else {
@@ -376,6 +396,10 @@ function applyBlend(): void {
     over.style.opacity = '1';
     over.style.clipPath = `inset(0 0 0 ${blend * 100}%)`;
   }
+  // Boxes follow the slider too: old positions fade out as the new revision fades in.
+  const fade = mode === 'blend';
+  document.querySelectorAll('.stage svg.annotations g[data-side="before"]').forEach((g) => g.setAttribute('opacity', fade ? String(1 - blend) : '1'));
+  document.querySelectorAll('.stage svg.annotations g[data-side="after"]').forEach((g) => g.setAttribute('opacity', fade ? String(blend) : '1'));
 }
 
 function contentBox(): BBox {

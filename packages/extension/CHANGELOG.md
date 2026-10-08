@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2
+
+- Change boxes now belong to a revision: removed items and old positions are boxed only on the older side, added items and new positions only on the newer side (old positions dotted). In Blend they fade with the slider.
+- Net changes are boxed only while selected (they overlapped the component boxes).
+- New "Boxes: all / selected" toolbar toggle, with a tooltip legend explaining the box colours.
+- Unselected boxes are thinner and lighter.
+
 ## 0.1.1
 
 - VS Code's own side-by-side diff (clicking a changed file in Source Control) now highlights changes: the left side shows removed parts in red, the right side added parts in green, changed areas are boxed, and pan/zoom is synced. A banner gives the change count, a change list, and a button to open the full KiCad diff.

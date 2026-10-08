@@ -27,6 +27,11 @@ export interface ChangeLocation {
   layer?: string;
   /** Area to zoom to, in KiCad page millimetres. */
   bbox?: BBox;
+  /**
+   * Revision this box belongs to: `before` for a removed item or an old position,
+   * `after` for an added item or a new position; omitted when it applies to both.
+   */
+  side?: 'before' | 'after';
 }
 
 export interface Change {

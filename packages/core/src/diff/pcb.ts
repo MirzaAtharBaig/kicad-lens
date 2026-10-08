@@ -1,7 +1,7 @@
-import { type BBox, type Point, union } from '../model/geom';
+import { type BBox, type Point } from '../model/geom';
 import { type Footprint, type Graphic, type Pcb, type Track, type Via, trackBox, viaBox } from '../model/pcb';
 import type { Change, DiffResult, FieldChange } from './types';
-import { cluster, fieldDiff, fmt, matchBy, plural, recordDiff, refCompare } from './util';
+import { cluster, clusterSide, fieldDiff, fmt, matchBy, plural, recordDiff, refCompare, sideLocations } from './util';
 
 const p2s = (p: Point) => `${fmt(p.x)},${fmt(p.y)}`;
 /** Footprints without a reference (logos, graphics) are named after their library footprint. */
@@ -65,20 +65,20 @@ export function diffPcb(before: Pcb, after: Pcb): DiffResult {
     changes.push({
       id: nextId(), category: 'component', kind: 'removed', title: fpTitle(f), summary: `Removed ${f.value ? f.value + ' ' : ''}(${f.fpid})`,
       fields: [{ field: 'Value', before: f.value }, { field: 'Footprint', before: f.fpid }],
-      locations: [{ layer: fpLayer(f), bbox: f.bbox }],
+      locations: [{ layer: fpLayer(f), bbox: f.bbox, side: 'before' }],
     });
   for (const f of fm.added)
     changes.push({
       id: nextId(), category: 'component', kind: 'added', title: fpTitle(f), summary: `Added ${f.value ? f.value + ' ' : ''}(${f.fpid})`,
       fields: [{ field: 'Value', after: f.value }, { field: 'Footprint', after: f.fpid }],
-      locations: [{ layer: fpLayer(f), bbox: f.bbox }],
+      locations: [{ layer: fpLayer(f), bbox: f.bbox, side: 'after' }],
     });
   for (const [b, a] of fm.pairs) {
     const fields = footprintFields(b, a);
     if (fields.length)
       changes.push({
         id: nextId(), category: 'component', kind: 'modified', title: fpTitle(a), summary: summarize(fields), fields,
-        locations: [{ layer: fpLayer(a), bbox: union(b.bbox, a.bbox) }],
+        locations: sideLocations({ layer: fpLayer(a) }, b.bbox, a.bbox),
       });
   }
 
@@ -112,7 +112,7 @@ export function diffPcb(before: Pcb, after: Pcb): DiffResult {
     changes.push({
       id: nextId(), category: 'routing', kind: allAdded ? 'added' : allRemoved ? 'removed' : 'modified',
       title: net || '(no net)', summary: parts.join(', '), fields,
-      locations: cluster(items, (i) => i.box, 0.5).map((c) => ({ layer: c.items[0]!.layer, bbox: c.bbox })),
+      locations: cluster(items, (i) => i.box, 0.5).map((c) => ({ layer: c.items[0]!.layer, bbox: c.bbox, side: clusterSide(c.items.filter((i) => i.added).length, c.items.filter((i) => !i.added).length) })),
     });
   }
 
@@ -120,9 +120,9 @@ export function diffPcb(before: Pcb, after: Pcb): DiffResult {
   const zm = matchBy(before.zones, after.zones, [(z) => z.uuid || undefined, (z) => `${z.name}|${z.net}|${z.layers.join(',')}`]);
   const zTitle = (z: (typeof before.zones)[number]) => z.name || z.net || 'Zone';
   for (const z of zm.removed)
-    changes.push({ id: nextId(), category: 'zone', kind: 'removed', title: zTitle(z), summary: `Zone removed (${z.layers.join(', ')})`, fields: [], locations: [{ layer: z.layers[0], bbox: z.bbox }] });
+    changes.push({ id: nextId(), category: 'zone', kind: 'removed', title: zTitle(z), summary: `Zone removed (${z.layers.join(', ')})`, fields: [], locations: [{ layer: z.layers[0], bbox: z.bbox, side: 'before' }] });
   for (const z of zm.added)
-    changes.push({ id: nextId(), category: 'zone', kind: 'added', title: zTitle(z), summary: `Zone added (${z.layers.join(', ')})`, fields: [], locations: [{ layer: z.layers[0], bbox: z.bbox }] });
+    changes.push({ id: nextId(), category: 'zone', kind: 'added', title: zTitle(z), summary: `Zone added (${z.layers.join(', ')})`, fields: [], locations: [{ layer: z.layers[0], bbox: z.bbox, side: 'after' }] });
   for (const [b, a] of zm.pairs) {
     const fields = [
       fieldDiff('Net', b.net, a.net),
@@ -139,7 +139,7 @@ export function diffPcb(before: Pcb, after: Pcb): DiffResult {
     if (fields.length)
       changes.push({
         id: nextId(), category: 'zone', kind: 'modified', title: zTitle(a), summary: `${fields.map((f) => f.field).join(', ')} changed`, fields,
-        locations: [{ layer: a.layers[0], bbox: union(b.bbox, a.bbox) }],
+        locations: sideLocations({ layer: a.layers[0] }, b.bbox, a.bbox),
       });
   }
 
@@ -159,7 +159,7 @@ export function diffPcb(before: Pcb, after: Pcb): DiffResult {
         kind: rem === 0 ? 'added' : add === 0 ? 'removed' : 'modified',
         title: layer === 'Edge.Cuts' ? 'Board outline' : layer,
         summary: [add && `${plural(add, 'shape')} added`, rem && `${plural(rem, 'shape')} removed`].filter(Boolean).join(', '),
-        fields: [], locations: [{ layer, bbox: c.bbox }],
+        fields: [], locations: [{ layer, bbox: c.bbox, side: clusterSide(add, rem) }],
       });
     }
   }

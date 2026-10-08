@@ -1,8 +1,8 @@
-import { type BBox, type Point, pointBox, segmentBox, union } from '../model/geom';
+import { type BBox, type Point, pointBox, segmentBox } from '../model/geom';
 import type { Netlist } from '../model/netlist';
 import type { Label, Schematic, SchSymbol, SheetInstance, Wire } from '../model/schematic';
 import type { Change, DiffResult, FieldChange } from './types';
-import { cluster, fieldDiff, fmt, matchBy, plural, recordDiff, refCompare } from './util';
+import { cluster, clusterSide, fieldDiff, fmt, matchBy, plural, recordDiff, refCompare, sideLocations } from './util';
 
 const p2s = (p: Point) => `${fmt(p.x)},${fmt(p.y)}`;
 /** Power and flag symbols (#PWR, #FLG) are listed apart from real parts. */
@@ -54,14 +54,14 @@ function sheetDiff(sb: SheetInstance | undefined, sa: SheetInstance | undefined,
       id: nextId(), category: symCat(s), kind: 'removed', title: s.reference,
       summary: `Removed ${s.properties['Value'] ?? ''} (${s.libId})`.trim(),
       fields: [{ field: 'Value', before: s.properties['Value'] }, { field: 'Library symbol', before: s.libId }],
-      locations: [{ sheet, bbox: s.bbox }],
+      locations: [{ sheet, bbox: s.bbox, side: 'before' }],
     });
   for (const s of m.added)
     changes.push({
       id: nextId(), category: symCat(s), kind: 'added', title: s.reference,
       summary: `Added ${s.properties['Value'] ?? ''} (${s.libId})`.trim(),
       fields: [{ field: 'Value', after: s.properties['Value'] }, { field: 'Library symbol', after: s.libId }],
-      locations: [{ sheet, bbox: s.bbox }],
+      locations: [{ sheet, bbox: s.bbox, side: 'after' }],
     });
   for (const [b, a] of m.pairs) {
     const fields = symbolChanges(b, a);
@@ -69,7 +69,7 @@ function sheetDiff(sb: SheetInstance | undefined, sa: SheetInstance | undefined,
     changes.push({
       id: nextId(), category: symCat(a), kind: 'modified', title: a.reference,
       summary: describeFields(fields), fields,
-      locations: [{ sheet, bbox: union(b.bbox, a.bbox) }],
+      locations: sideLocations({ sheet }, b.bbox, a.bbox),
     });
   }
 
@@ -92,7 +92,7 @@ function sheetDiff(sb: SheetInstance | undefined, sa: SheetInstance | undefined,
       id: nextId(), category: 'wiring', kind: rem === 0 ? 'added' : add === 0 ? 'removed' : 'modified',
       title: 'Wiring',
       summary: [add && `${plural(add, 'item')} added`, rem && `${plural(rem, 'item')} removed`].filter(Boolean).join(', '),
-      fields: [], locations: [{ sheet, bbox: c.bbox }],
+      fields: [], locations: [{ sheet, bbox: c.bbox, side: clusterSide(add, rem) }],
     });
   }
 
@@ -101,9 +101,9 @@ function sheetDiff(sb: SheetInstance | undefined, sa: SheetInstance | undefined,
   const lm = matchBy(sb?.labels ?? [], sa?.labels ?? [], [(l) => `${lk(l)}=${l.text}`, lk, (l) => `${l.kind}=${l.text}`]);
   const kindName = (l: Label) => l.kind.replace('_', ' ');
   for (const l of lm.removed)
-    changes.push({ id: nextId(), category: 'label', kind: 'removed', title: l.text, summary: `Removed ${kindName(l)}`, fields: [], locations: [{ sheet, bbox: pointBox(l.at, 2) }] });
+    changes.push({ id: nextId(), category: 'label', kind: 'removed', title: l.text, summary: `Removed ${kindName(l)}`, fields: [], locations: [{ sheet, bbox: pointBox(l.at, 2), side: 'before' }] });
   for (const l of lm.added)
-    changes.push({ id: nextId(), category: 'label', kind: 'added', title: l.text, summary: `Added ${kindName(l)}`, fields: [], locations: [{ sheet, bbox: pointBox(l.at, 2) }] });
+    changes.push({ id: nextId(), category: 'label', kind: 'added', title: l.text, summary: `Added ${kindName(l)}`, fields: [], locations: [{ sheet, bbox: pointBox(l.at, 2), side: 'after' }] });
   for (const [b, a] of lm.pairs) {
     if (b.text !== a.text)
       changes.push({
@@ -114,16 +114,16 @@ function sheetDiff(sb: SheetInstance | undefined, sa: SheetInstance | undefined,
       changes.push({
         id: nextId(), category: 'label', kind: 'modified', title: a.text, summary: 'Moved',
         fields: [{ field: 'Position', before: p2s(b.at), after: p2s(a.at) }],
-        locations: [{ sheet, bbox: union(pointBox(b.at, 2), pointBox(a.at, 2)) }],
+        locations: sideLocations({ sheet }, pointBox(b.at, 2), pointBox(a.at, 2)),
       });
   }
 
   // --- Sub-sheet frames -----------------------------------------------------------
   const fm = matchBy(sb?.sheetFrames ?? [], sa?.sheetFrames ?? [], [(f) => f.uuid, (f) => f.name]);
   for (const f of fm.removed)
-    changes.push({ id: nextId(), category: 'sheet', kind: 'removed', title: f.name, summary: `Removed sheet ${f.file}`, fields: [], locations: [{ sheet, bbox: f.bbox }] });
+    changes.push({ id: nextId(), category: 'sheet', kind: 'removed', title: f.name, summary: `Removed sheet ${f.file}`, fields: [], locations: [{ sheet, bbox: f.bbox, side: 'before' }] });
   for (const f of fm.added)
-    changes.push({ id: nextId(), category: 'sheet', kind: 'added', title: f.name, summary: `Added sheet ${f.file}`, fields: [], locations: [{ sheet, bbox: f.bbox }] });
+    changes.push({ id: nextId(), category: 'sheet', kind: 'added', title: f.name, summary: `Added sheet ${f.file}`, fields: [], locations: [{ sheet, bbox: f.bbox, side: 'after' }] });
   for (const [b, a] of fm.pairs) {
     const fields = [fieldDiff('Name', b.name, a.name), fieldDiff('File', b.file, a.file)].filter((x): x is FieldChange => !!x);
     if (fields.length)

@@ -64,6 +64,13 @@ describe('diffSchematic', () => {
     const byTitle = Object.fromEntries(changes.filter((c) => c.category === 'component').map((c) => [c.title, c]));
     expect(byTitle['R1']).toMatchObject({ kind: 'modified', summary: 'Value 10k → 4k7' });
     expect(byTitle['R2']).toMatchObject({ kind: 'modified', summary: 'Moved' });
+    // A moved part has a box at its old position (before) and its new one (after).
+    expect(byTitle['R2']!.locations.map((l) => l.side).sort()).toEqual(['after', 'before']);
+    expect(byTitle['R3']!.locations[0]!.side).toBe('before');
+    expect(byTitle['R4']!.locations[0]!.side).toBe('after');
+    // An edit in place has one shared box.
+    expect(byTitle['R1']!.locations).toHaveLength(1);
+    expect(byTitle['R1']!.locations[0]!.side).toBeUndefined();
     expect(byTitle['R3']).toMatchObject({ kind: 'removed' });
     expect(byTitle['R4']).toMatchObject({ kind: 'added' });
     expect(changes.find((c) => c.category === 'label')).toMatchObject({ kind: 'modified', summary: 'Renamed SDA → SDA0' });

@@ -177,7 +177,17 @@ export interface Annotations {
   links?: { bbox: BBox; target: string }[];
   flash?: BBox;
   onLink?: (target: string) => void;
+  /** Only draw boxes that belong to this revision (one pane of a side-by-side view). */
+  side?: 'before' | 'after';
+  /** Draw only the selected change's boxes. */
+  onlySelected?: boolean;
 }
+
+/**
+ * Net changes point at every part on the net, duplicating the component boxes;
+ * they are only drawn while selected.
+ */
+const BOX_ONLY_WHEN_SELECTED = new Set(['net']);
 
 /** Change boxes, child-sheet links and search highlights, in page millimetres. */
 export function buildAnnotations(stage: HTMLElement, size: { width: number; height: number }, ctx: StageContext, a: Annotations): void {
@@ -186,14 +196,26 @@ export function buildAnnotations(stage: HTMLElement, size: { width: number; heig
   svg.classList.add('annotations', 'fill');
   svg.setAttribute('viewBox', `0 0 ${size.width} ${size.height}`);
   svg.setAttribute('preserveAspectRatio', 'none');
-  const rect = (b: BBox, cls: string) => {
+  const groups = new Map<string, SVGGElement>();
+  const group = (side?: 'before' | 'after') => {
+    const key = side ?? 'both';
+    let g = groups.get(key);
+    if (!g) {
+      g = document.createElementNS(SVG_NS, 'g');
+      g.setAttribute('data-side', key); // applyBlend() fades old/new boxes with the slider
+      svg.append(g);
+      groups.set(key, g);
+    }
+    return g;
+  };
+  const rect = (b: BBox, cls: string, parent: SVGElement = svg) => {
     const r = document.createElementNS(SVG_NS, 'rect');
     r.setAttribute('x', String(b.minX));
     r.setAttribute('y', String(b.minY));
     r.setAttribute('width', String(Math.max(b.maxX - b.minX, 0.5)));
     r.setAttribute('height', String(Math.max(b.maxY - b.minY, 0.5)));
     r.setAttribute('class', cls);
-    svg.append(r);
+    parent.append(r);
     return r;
   };
   for (const l of a.links ?? []) {
@@ -204,11 +226,14 @@ export function buildAnnotations(stage: HTMLElement, size: { width: number; heig
     r.append(t);
   }
   for (const c of a.changes) {
+    const isSelected = c.id === a.selected;
+    if (!isSelected && (a.onlySelected || BOX_ONLY_WHEN_SELECTED.has(c.category))) continue;
     for (const loc of c.locations) {
       if (!loc.bbox) continue;
       if (loc.sheet !== undefined && loc.sheet !== ctx.sheetId) continue;
       if (loc.layer !== undefined && ctx.layers.size && !ctx.layers.get(loc.layer)?.visible) continue;
-      rect(loc.bbox, `chg ${c.kind}${c.id === a.selected ? ' selected' : ''}`);
+      if (a.side && loc.side && loc.side !== a.side) continue;
+      rect(loc.bbox, `chg ${c.kind}${loc.side === 'before' ? ' old' : ''}${isSelected ? ' selected' : ''}`, group(loc.side));
     }
   }
   if (a.flash) rect(a.flash, 'flash');
