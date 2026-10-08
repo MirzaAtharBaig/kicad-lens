@@ -1,0 +1,12 @@
+{
+  "name": "@kicad-lens/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "KiCad file parsing, kicad-cli rendering and semantic diffing (no VS Code dependency)",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b"
+  }
+}

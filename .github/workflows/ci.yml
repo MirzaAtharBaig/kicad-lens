@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  render:
+    # Render tests need kicad-cli; run them inside the official KiCad images.
+    strategy:
+      fail-fast: false
+      matrix:
+        kicad: ['8.0', '9.0']
+    runs-on: ubuntu-latest
+    container:
+      image: kicad/kicad:${{ matrix.kicad }}
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm test
+        env:
+          KICAD_LENS_RENDER_TESTS: '1'

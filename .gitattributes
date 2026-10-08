@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.kicad_sch text eol=lf diff
+*.kicad_pcb text eol=lf diff
+*.svg binary

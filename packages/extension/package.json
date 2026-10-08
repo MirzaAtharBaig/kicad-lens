@@ -1,0 +1,263 @@
+{
+  "name": "kicad-lens",
+  "displayName": "KiCad Lens",
+  "description": "View KiCad schematics and PCBs in VS Code and diff them across git revisions — visually and semantically.",
+  "version": "0.1.0",
+  "publisher": "MirzaAtharBaig",
+  "license": "MIT",
+  "author": "Mirza Athar Baig",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MirzaAtharBaig/kicad-lens"
+  },
+  "bugs": "https://github.com/MirzaAtharBaig/kicad-lens/issues",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Visualization",
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "kicad",
+    "schematic",
+    "pcb",
+    "diff",
+    "eda",
+    "electronics",
+    "git"
+  ],
+  "icon": "media/icon.png",
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "workspaceContains:**/*.kicad_pro"
+  ],
+  "extensionDependencies": [
+    "vscode.git"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Rendering runs the locally installed kicad-cli; the kicad-cli path setting is ignored in untrusted workspaces."
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "kicadLens.viewer",
+        "displayName": "KiCad Lens",
+        "selector": [
+          {
+            "filenamePattern": "*.kicad_sch"
+          },
+          {
+            "filenamePattern": "*.kicad_pcb"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "kicadLens.compareWithHead",
+        "title": "Compare with HEAD",
+        "category": "KiCad Lens",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "kicadLens.compareWithRevision",
+        "title": "Compare with Revision…",
+        "category": "KiCad Lens"
+      },
+      {
+        "command": "kicadLens.compareWithBranch",
+        "title": "Compare with Branch or Tag…",
+        "category": "KiCad Lens"
+      },
+      {
+        "command": "kicadLens.compareSelected",
+        "title": "Compare Selected (KiCad Lens)",
+        "category": "KiCad Lens"
+      },
+      {
+        "command": "kicadLens.compareTimeline",
+        "title": "Compare with KiCad Lens",
+        "category": "KiCad Lens"
+      },
+      {
+        "command": "kicadLens.openScmDiff",
+        "title": "Open KiCad Diff",
+        "category": "KiCad Lens",
+        "icon": "$(circuit-board)"
+      },
+      {
+        "command": "kicadLens.openAsText",
+        "title": "Open as Text",
+        "category": "KiCad Lens",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "kicadLens.locateKicadCli",
+        "title": "Set kicad-cli Path…",
+        "category": "KiCad Lens"
+      },
+      {
+        "command": "kicadLens.clearCache",
+        "title": "Clear Render Cache",
+        "category": "KiCad Lens"
+      },
+      {
+        "command": "kicadLens.showLog",
+        "title": "Show Log",
+        "category": "KiCad Lens"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "kicadLens.compareSelected",
+          "when": "false"
+        },
+        {
+          "command": "kicadLens.compareTimeline",
+          "when": "false"
+        },
+        {
+          "command": "kicadLens.openScmDiff",
+          "when": "false"
+        },
+        {
+          "command": "kicadLens.compareWithHead",
+          "when": "kicadLens.activeKicadFile"
+        },
+        {
+          "command": "kicadLens.compareWithRevision",
+          "when": "kicadLens.activeKicadFile"
+        },
+        {
+          "command": "kicadLens.compareWithBranch",
+          "when": "kicadLens.activeKicadFile"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "kicadLens.compareWithHead",
+          "when": "activeCustomEditorId == kicadLens.viewer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "kicadLens.openAsText",
+          "when": "activeCustomEditorId == kicadLens.viewer",
+          "group": "navigation@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "kicadLens.compareWithHead",
+          "when": "resourceExtname =~ /\\.kicad_(sch|pcb)$/",
+          "group": "3_compare@10"
+        },
+        {
+          "command": "kicadLens.compareWithRevision",
+          "when": "resourceExtname =~ /\\.kicad_(sch|pcb)$/",
+          "group": "3_compare@11"
+        },
+        {
+          "command": "kicadLens.compareSelected",
+          "when": "listMultiSelection && resourceExtname =~ /\\.kicad_(sch|pcb)$/",
+          "group": "3_compare@12"
+        }
+      ],
+      "scm/resourceState/context": [
+        {
+          "command": "kicadLens.openScmDiff",
+          "when": "scmProvider == git && scmResourceState =~ /.*/ && resourceExtname =~ /\\.kicad_(sch|pcb)$/",
+          "group": "navigation@0"
+        }
+      ],
+      "scm/resourceState/inline": [
+        {
+          "command": "kicadLens.openScmDiff",
+          "when": "scmProvider == git && resourceExtname =~ /\\.kicad_(sch|pcb)$/",
+          "group": "inline@0"
+        }
+      ],
+      "timeline/item/context": [
+        {
+          "command": "kicadLens.compareTimeline",
+          "when": "timelineItem =~ /git:file:commit/ && resourceExtname =~ /\\.kicad_(sch|pcb)$/",
+          "group": "inline_compare@0"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "kicadLens.nextChange",
+        "key": "f7",
+        "when": "kicadLens.diffFocused"
+      },
+      {
+        "command": "kicadLens.previousChange",
+        "key": "shift+f7",
+        "when": "kicadLens.diffFocused"
+      }
+    ],
+    "configuration": {
+      "title": "KiCad Lens",
+      "properties": {
+        "kicadLens.kicadCliPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "description": "Path to kicad-cli. Leave empty to search PATH and the standard KiCad install locations."
+        },
+        "kicadLens.cacheSizeMB": {
+          "type": "number",
+          "default": 1024,
+          "minimum": 50,
+          "description": "Maximum size of the SVG render cache."
+        },
+        "kicadLens.defaultDiffMode": {
+          "type": "string",
+          "enum": [
+            "overlay",
+            "sideBySide",
+            "blend",
+            "swipe"
+          ],
+          "default": "overlay",
+          "description": "Diff mode used when a KiCad diff opens."
+        },
+        "kicadLens.showDrawingSheet": {
+          "type": "boolean",
+          "default": true,
+          "description": "Render the drawing sheet (frame and title block)."
+        },
+        "kicadLens.backgroundPrerender": {
+          "type": "boolean",
+          "default": true,
+          "description": "Render the HEAD revision of modified KiCad files in the background so diffs open instantly."
+        },
+        "kicadLens.syncStockDiff": {
+          "type": "boolean",
+          "default": true,
+          "description": "When VS Code's built-in diff shows two KiCad Lens viewers side by side, keep their pan/zoom in sync."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "vsce package --no-dependencies -o ../../kicad-lens.vsix"
+  },
+  "dependencies": {
+    "@kicad-lens/core": "*"
+  },
+  "devDependencies": {
+    "@types/vscode": "~1.90.0",
+    "@vscode/vsce": "^4.0.0"
+  }
+}
