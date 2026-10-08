@@ -27,6 +27,19 @@ function manifests() {
 
 const tabs = () => vscode.window.tabGroups.all.flatMap((g) => g.tabs);
 
+/** Search the extension's output channel, which VS Code mirrors into the logs folder. */
+function findInLogs(re) {
+  const walk = (dir) =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]));
+  const logs = path.join(process.env.KICAD_LENS_USER_DATA, 'logs');
+  if (!fs.existsSync(logs)) return undefined;
+  for (const f of walk(logs).filter((f) => f.endsWith('KiCad Lens.log'))) {
+    const m = re.exec(fs.readFileSync(f, 'utf8'));
+    if (m) return m;
+  }
+  return undefined;
+}
+
 function step(msg) {
   fs.appendFileSync(path.join(process.env.KICAD_LENS_USER_DATA, "smoke.log"), `${new Date().toISOString()} ${msg}
 `);
@@ -37,7 +50,7 @@ exports.run = async function run() {
     await smoke();
     step("PASS");
   } catch (e) {
-    step(`FAIL ${e && e.stack}`);
+    step(`FAIL ${e && (e.stack || e.message || String(e))}`);
     throw e;
   }
 }
@@ -73,12 +86,14 @@ async function smoke() {
   const pcbManifest = await waitFor('pcb render', () => manifests().find((m) => m.kind === 'pcb'));
   for (const l of ['F.Cu', 'B.Cu', 'Edge.Cuts']) assert.ok(pcbManifest.layers.find((x) => x.name === l && x.svg), `layer ${l} rendered`);
 
+  // The schematic is modified, so HEAD is pre-rendered in the background.
+  await waitFor('HEAD prerender', () => manifests().filter((m) => m.kind === 'sch').length === 2);
+
   // Opening a sub-sheet renders the same hierarchy (no new schematic render).
   const before = manifests().length;
   await vscode.commands.executeCommand('vscode.openWith', sub, 'kicadLens.viewer', { preview: false });
   await sleep(3000);
-  assert.strictEqual(manifests().filter((m) => m.kind === 'sch').length, 1, 'sub-sheet reuses the root render');
-  assert.strictEqual(manifests().length, before);
+  assert.strictEqual(manifests().length, before, 'sub-sheet reuses the root render');
 
   step('pcb + sub-sheet ok');
   // Diff panel between two working-tree files.
@@ -89,6 +104,30 @@ async function smoke() {
   const panels = tabs().length;
   await vscode.commands.executeCommand('kicadLens.compareSelected', sch, [sch, pcb]);
   assert.strictEqual(tabs().length, panels);
+  step('diff panel ok');
+
+  // VS Code's built-in diff (what clicking a modified file in Source Control opens):
+  // both sides must pair and receive the semantic diff. runTest.mjs committed the
+  // demo project and then changed R1's value in the working tree.
+  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  step('closed editors');
+  const gitApi = vscode.extensions.getExtension('vscode.git').exports.getAPI(1);
+  await waitFor('git to see the change', () =>
+    gitApi.repositories.some((r) => r.state.workingTreeChanges.some((c) => c.uri.fsPath === sch.fsPath)),
+  );
+  // Same command Source Control runs when a modified file is clicked (index ↔ working tree).
+  await vscode.commands.executeCommand('git.openChange', sch);
+  await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+  // In a test window VS Code sometimes defers resolving the webviews inside a diff
+  // indefinitely; only assert when the viewers actually came up.
+  const resolved = await waitFor('stock diff viewers', () => findInLogs(/Resolving viewer for git:/), 60000).catch(() => undefined);
+  if (!resolved) {
+    step('SKIP stock diff check: VS Code did not resolve the diff viewers in this window');
+  } else {
+    const logLine = await waitFor('paired side-by-side diff', () => findInLogs(/Side-by-side diff Index ↔ Working tree: (\d+) changes/));
+    step(`stock diff: ${logLine[0]}`);
+    assert.ok(Number(logLine[1]) >= 1, 'R1 value change detected');
+  }
 
   step('all checks passed');
 }

@@ -14,6 +14,7 @@ interface Persisted {
   layers?: [string, LayerState][];
   flipped?: boolean;
   showChanges?: boolean;
+  showChangesPaired?: boolean;
   onlyCurrent?: boolean;
 }
 
@@ -97,11 +98,17 @@ function renderError(message: string, actions: { label: string; command: string 
 function onShow(m: Show): void {
   const first = !show;
   show = m;
-  mode = m.mode === 'diff' ? (persisted.mode ?? m.diffMode) : 'overlay';
+  mode = m.mode === 'diff' && !m.pairedWith ? (persisted.mode ?? m.diffMode) : 'overlay';
   const rev = m.after;
   if (rev.kind === 'sch') {
     const ids = rev.sheets?.map((s) => s.id) ?? [];
-    const want = [persisted.sheetId, m.initialSheet, ...changedSheets(), ids[0]].find((s) => s && (ids.includes(s) || m.before?.sheets?.some((x) => x.id === s)));
+    // Re-shows keep the current sheet; a fresh diff opens on the first changed sheet.
+    const order = first
+      ? m.mode === 'diff'
+        ? [m.initialSheet, ...changedSheets(), persisted.sheetId]
+        : [persisted.sheetId, m.initialSheet]
+      : [ctx.sheetId, m.initialSheet, ...changedSheets()];
+    const want = [...order, ids[0]].find((s) => s && (ids.includes(s) || m.before?.sheets?.some((x) => x.id === s)));
     ctx.sheetId = want ?? ids[0];
   } else {
     const saved = new Map(persisted.layers ?? []);
@@ -114,6 +121,11 @@ function onShow(m: Show): void {
   rebuild();
   if (first && persisted.viewport) for (const p of panes) p.pz.set(persisted.viewport);
   else fit();
+}
+
+/** This webview is one side of VS Code's built-in side-by-side diff. */
+function paired(): boolean {
+  return !!show?.pairedWith && show.mode === 'diff';
 }
 
 function changes(): Change[] {
@@ -131,7 +143,7 @@ function buildLayout(): void {
 
   const toolbar = h('div', { class: 'toolbar' });
   toolbar.append(h('span', { class: 'title', title: m.title }, m.title));
-  if (isDiff) {
+  if (isDiff && !paired()) {
     const seg = h('div', { class: 'segmented', role: 'tablist' });
     for (const [id, label] of [['overlay', 'Overlay'], ['sideBySide', 'Side by side'], ['blend', 'Blend'], ['swipe', 'Swipe']] as const) {
       const b = h('button', { 'data-mode': id, title: label }, label);
@@ -181,14 +193,28 @@ function buildLayout(): void {
   const statusbar = h('div', { class: 'statusbar' }, h('span', { class: 'zoom' }), h('span', { class: 'cursor' }), h('span', { class: 'warnings' }));
   const children: HTMLElement[] = [toolbar];
   if (m.pairedWith) {
-    const banner = h('div', { class: 'banner' }, `This is VS Code's side-by-side diff (${m.pairedWith === 'left' ? 'original' : 'modified'}). Pan and zoom are synced. `);
-    const open = h('button', {}, 'Open KiCad diff (overlay + change list)');
+    const n = changes().length;
+    const text = !isDiff
+      ? 'Comparing… '
+      : n
+        ? `${n} change${n === 1 ? '' : 's'} — ${m.pairedWith === 'left' ? 'removed parts in red' : 'added parts in green'}, changed areas boxed. Pan/zoom synced. `
+        : 'No semantic changes found. Pan/zoom synced. ';
+    const banner = h('div', { class: 'banner' }, text);
+    if (isDiff && n) {
+      const list = h('button', {}, 'Change list');
+      list.onclick = () => togglePanel();
+      banner.append(list, ' ');
+    }
+    const open = h('button', {}, 'Open full KiCad diff');
     open.onclick = () => post({ type: 'command', command: 'openFullDiff' });
     banner.append(open);
     children.push(banner);
   }
   children.push(body, statusbar);
   document.body.replaceChildren(...children);
+  // Half-width panes are narrow: the change list starts collapsed there.
+  const panelKey = paired() ? 'showChangesPaired' : 'showChanges';
+  if (paired() ? !persisted[panelKey] : persisted[panelKey] === false) document.body.classList.add('no-changes');
 
   const warnings = [...(m.before?.warnings ?? []), ...m.after.warnings];
   if (warnings.length) {
@@ -197,7 +223,6 @@ function buildLayout(): void {
     w.title = warnings.join('\n');
     w.onclick = () => post({ type: 'command', command: 'showLog' });
   }
-  if (persisted.showChanges === false) document.body.classList.add('no-changes');
   document.onkeydown = onKey;
 }
 
@@ -209,7 +234,7 @@ function setMode(m: DiffMode): void {
 
 function togglePanel(): void {
   document.body.classList.toggle('no-changes');
-  save({ showChanges: !document.body.classList.contains('no-changes') });
+  save({ [paired() ? 'showChangesPaired' : 'showChanges']: !document.body.classList.contains('no-changes') });
   for (const p of panes) p.pz.apply(false);
 }
 
@@ -258,6 +283,8 @@ function rebuild(): void {
     pz.onChange((v, user) => {
       lastViewport = v;
       $('.zoom').textContent = `${Math.round(v.scale * 25.4)} px/in`;
+      // ~200 px/in: below it anti-alias residue tints unchanged lines; above it filters get too big.
+      stage.classList.toggle('aa-filter', v.scale < 8);
       if (!user || syncing) return;
       syncing = true;
       for (const o of panes) if (o !== pane) o.pz.set(v);
@@ -282,9 +309,12 @@ function rebuildStages(): void {
   const m = show!;
   const diff = m.mode === 'diff';
   const size = pageSize(m.after.kind === 'sch' && !sheetOf(m.after, ctx.sheetId) ? m.before : m.after, ctx);
+  const half = paired() ? (m.pairedWith === 'left' ? 'before' : 'after') : undefined;
+  // In one half of a side-by-side diff, box only what this side can show.
+  const visibleChanges = half ? changes().filter((c) => c.kind === 'modified' || c.kind === (half === 'before' ? 'removed' : 'added')) : changes();
   const annotate = (stage: HTMLElement, rev?: RevisionView) =>
     buildAnnotations(stage, size, ctx, {
-      changes: diff ? changes() : [],
+      changes: diff ? visibleChanges : [],
       selected,
       flash,
       links: sheetOf(rev ?? m.after, ctx.sheetId)?.links,
@@ -295,6 +325,16 @@ function rebuildStages(): void {
     buildRevision(panes[0]!.stage, m.after, ctx);
     annotate(panes[0]!.stage);
     panes[0]!.label.textContent = '';
+  } else if (half) {
+    const own = half === 'before' ? m.before : m.after;
+    buildOverlay(panes[0]!.stage, m.before, m.after, ctx, half);
+    annotate(panes[0]!.stage, own);
+    panes[0]!.label.replaceChildren(
+      half === 'before'
+        ? h('span', { class: 'legend removed' }, `− removed in ${m.after.label}`)
+        : h('span', { class: 'legend added' }, `+ added since ${m.before?.label ?? ''}`),
+      h('span', { class: 'legend unchanged' }, 'unchanged'),
+    );
   } else if (mode === 'overlay') {
     buildOverlay(panes[0]!.stage, m.before, m.after, ctx);
     annotate(panes[0]!.stage);

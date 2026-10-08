@@ -121,6 +121,7 @@ export class RenderService implements vscode.Disposable {
   /** Snapshot + render of a document at one revision. */
   async load(spec: RevisionSpec, signal?: AbortSignal): Promise<LoadedRevision> {
     this.setBusy(1);
+    const t0 = Date.now();
     try {
       const src = await this.source(spec);
       const dir = path.dirname(spec.fsPath);
@@ -135,7 +136,9 @@ export class RenderService implements vscode.Disposable {
         const opened = path.basename(spec.fsPath);
         const focus = snapshot.schematic?.sheets.find((s) => s.file === opened);
         const finalSnap = focus ? snapshot : await takeSnapshot(opened, src);
+        const t1 = Date.now();
         const manifest = await (await this.renderCache()).render(finalSnap, { showDrawingSheet: this.showDrawingSheet(), signal });
+        this.log.appendLine(`  ${spec.label}: snapshot ${t1 - t0} ms, render ${Date.now() - t1} ms`);
         return { spec, snapshot: finalSnap, manifest, focusSheet: (focus ?? finalSnap.schematic?.sheets[0])?.namePath };
       }
       const snapshot = await takeSnapshot(entry, src);

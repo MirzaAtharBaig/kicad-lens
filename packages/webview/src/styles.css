@@ -505,3 +505,12 @@ svg.annotations rect.link:hover {
   color: var(--vscode-editorWarning-foreground, #cca700);
   cursor: pointer;
 }
+
+/* Overlay anti-alias clean-up (see ensureFilters in stage.ts). Only at low zoom:
+   filtered layers rasterize at full zoomed size and vanish past texture limits. */
+.stage.aa-filter .aa-cut {
+  filter: url(#kl-cut);
+}
+.stage.aa-filter .aa-boost {
+  filter: url(#kl-boost);
+}

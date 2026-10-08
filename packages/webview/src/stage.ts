@@ -37,9 +37,36 @@ function sizeStage(stage: HTMLElement, size: { width: number; height: number }):
   stage.style.height = `${size.height * PX_PER_MM}px`;
 }
 
+/**
+ * Alpha filters for overlay layers. Anti-aliased strokes never cancel exactly:
+ * an unchanged line of coverage `a` leaves `a·(1−a)` (≤ 0.25) behind in a
+ * subtract mask, which at low zoom tints every line. `kl-cut` drops that residue;
+ * `kl-boost` restores the `a·a` coverage of the intersect (unchanged) layer.
+ */
+function ensureFilters(): void {
+  if (document.getElementById('kl-filters')) return;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.id = 'kl-filters';
+  svg.setAttribute('width', '0');
+  svg.setAttribute('height', '0');
+  svg.style.position = 'absolute';
+  // Static markup, no user data.
+  svg.innerHTML = `
+    <filter id="kl-cut" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncA type="linear" slope="1.8" intercept="-0.45"/></feComponentTransfer></filter>
+    <filter id="kl-boost" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncA type="gamma" amplitude="1" exponent="0.5" offset="0"/></feComponentTransfer></filter>`;
+  document.body.append(svg);
+}
+
 /** Full-size layer whose colour shows through an alpha mask built from one or two SVGs. */
 function maskLayer(color: string, opacity: number, a: string, b?: string, op?: 'intersect' | 'subtract'): HTMLElement {
-  const d = el('div', 'fill', { backgroundColor: color, opacity: String(opacity) });
+  const d = el('div', 'fill', { backgroundColor: color });
+  // Filters run before masking on the same element, so they go on a wrapper.
+  const wrap = el('div', 'fill', { opacity: String(opacity) });
+  wrap.append(d);
+  if (op) {
+    ensureFilters();
+    wrap.classList.add(op === 'subtract' ? 'aa-cut' : 'aa-boost');
+  }
   const urls = [a, b].filter((u): u is string => !!u);
   Promise.all(urls.map(svgBlobUrl))
     .then((blobs) => {
@@ -52,7 +79,7 @@ function maskLayer(color: string, opacity: number, a: string, b?: string, op?: '
       }
     })
     .catch(() => d.classList.add('load-error'));
-  return d;
+  return wrap;
 }
 
 function imageLayer(url: string): HTMLElement {
@@ -97,26 +124,38 @@ export function buildRevision(stage: HTMLElement, rev: RevisionView | undefined,
   }
 }
 
-/** Overlay diff: unchanged grey, removed red, added green. */
-export function buildOverlay(stage: HTMLElement, before: RevisionView | undefined, after: RevisionView | undefined, ctx: StageContext): void {
+/**
+ * Overlay diff: unchanged grey, removed red, added green.
+ * `half` limits it to one side, as in a side-by-side diff: `before` shows
+ * unchanged + removed, `after` shows unchanged + added.
+ */
+export function buildOverlay(
+  stage: HTMLElement,
+  before: RevisionView | undefined,
+  after: RevisionView | undefined,
+  ctx: StageContext,
+  half?: 'before' | 'after',
+): void {
   stage.replaceChildren();
   sizeStage(stage, pageSize(after ?? before, ctx));
   const kind = (after ?? before)?.kind;
+  const showRemoved = half !== 'after';
+  const showAdded = half !== 'before';
   const triple = (parent: HTMLElement, a?: string, b?: string, opacity = 1) => {
     if (a && b) {
-      parent.append(
-        maskLayer(OVERLAY.unchanged, 0.75 * opacity, a, b, 'intersect'),
-        maskLayer(OVERLAY.removed, opacity, a, b, 'subtract'),
-        maskLayer(OVERLAY.added, opacity, b, a, 'subtract'),
-      );
-    } else if (a) parent.append(maskLayer(OVERLAY.removed, opacity, a));
-    else if (b) parent.append(maskLayer(OVERLAY.added, opacity, b));
+      parent.append(maskLayer(OVERLAY.unchanged, 0.75 * opacity, a, b, 'intersect'));
+      if (showRemoved) parent.append(maskLayer(OVERLAY.removed, opacity, a, b, 'subtract'));
+      if (showAdded) parent.append(maskLayer(OVERLAY.added, opacity, b, a, 'subtract'));
+    } else if (a && showRemoved) parent.append(maskLayer(OVERLAY.removed, opacity, a));
+    else if (b && showAdded) parent.append(maskLayer(OVERLAY.added, opacity, b));
   };
   if (kind === 'sch') {
     const paper = el('div', 'paper fill');
     stage.append(paper);
     const sb = sheetOf(before, ctx.sheetId);
     const sa = sheetOf(after, ctx.sheetId);
+    if (half === 'before' && !sb) paper.append(missing('Sheet not present in this revision'));
+    if (half === 'after' && !sa) paper.append(missing('Sheet not present in this revision'));
     triple(paper, sb?.maskUrl ?? sb?.svgUrl, sa?.maskUrl ?? sa?.svgUrl);
   } else {
     const board = el('div', 'board overlay fill');

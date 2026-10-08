@@ -2,7 +2,7 @@
   "name": "kicad-lens",
   "displayName": "KiCad Lens",
   "description": "View KiCad schematics and PCBs in VS Code and diff them across git revisions — visually and semantically.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "MirzaAtharBaig",
   "license": "MIT",
   "author": "Mirza Athar Baig",
